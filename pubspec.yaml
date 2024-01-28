@@ -13,11 +13,13 @@ dependencies:
   flutter_web_plugins:
     sdk: flutter
   plugin_platform_interface: ^2.0.2
+  flutter_plugin_android_lifecycle: ^2.0.17
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^2.0.0
+  flutter_lints: ^3.0.0
+  pigeon: ^16.0.4
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -41,10 +43,12 @@ flutter:
         pluginClass: HardwareCryptoPlugin
       ios:
         pluginClass: HardwareCryptoPlugin
+        sharedDarwinSource: true
       linux:
         pluginClass: HardwareCryptoPlugin
       macos:
         pluginClass: HardwareCryptoPlugin
+        sharedDarwinSource: true
       windows:
         pluginClass: HardwareCryptoPluginCApi
       web:

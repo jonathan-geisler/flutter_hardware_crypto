@@ -16,15 +16,11 @@
 namespace hardware_crypto {
 namespace test {
 
-TEST(HardwareCryptoPlugin, GetPlatformVersion) {
-  g_autoptr(FlMethodResponse) response = get_platform_version();
-  ASSERT_NE(response, nullptr);
-  ASSERT_TRUE(FL_IS_METHOD_SUCCESS_RESPONSE(response));
-  FlValue* result = fl_method_success_response_get_result(
-      FL_METHOD_SUCCESS_RESPONSE(response));
-  ASSERT_EQ(fl_value_get_type(result), FL_VALUE_TYPE_STRING);
-  // The full string varies, so just validate that it has the right format.
-  EXPECT_THAT(fl_value_get_string(result), testing::StartsWith("Linux "));
+TEST(HardwareCryptoPlugin, IsSupported) {
+  g_autoptr(FlValue) result = hardware_crypto_plugin_isSupported();
+  ASSERT_NE(result, nullptr);
+  ASSERT_EQ(fl_value_get_type(result), FL_VALUE_TYPE_BOOL);
+  EXPECT_THAT(fl_value_get_bool(result), false);
 }
 
 }  // namespace test
