@@ -181,7 +181,7 @@ static void hardware_crypto_plugin_handle_isSupported(
   FlBasicMessageChannelResponseHandle *response_handle,
   gpointer user_data
 ) {
-  g_autoptr(FlValue) response = hardware_crypto_plugin_isSupported();
+  FlValue *response = hardware_crypto_plugin_isSupported();
   g_autoptr(FlValue) value = fl_value_new_list();
   fl_value_append_take(value, response);
   fl_basic_message_channel_respond(channel, response_handle, value, NULL);
@@ -199,7 +199,7 @@ static void hardware_crypto_plugin_handle_generateKeyPair(
   FlBasicMessageChannelResponseHandle *response_handle,
   gpointer user_data
 ) {
-  g_autoptr(FlValue) response = hardware_crypto_plugin_generateKeyPair(message);
+  FlValue *response = hardware_crypto_plugin_generateKeyPair(message);
   g_autoptr(FlValue) value = fl_value_new_list();
   fl_value_append_take(value, response);
   fl_basic_message_channel_respond(channel, response_handle, value, NULL);
@@ -215,7 +215,7 @@ static void hardware_crypto_plugin_handle_deleteKeyPair(
   FlBasicMessageChannelResponseHandle *response_handle,
   gpointer user_data
 ) {
-  g_autoptr(FlValue) response = hardware_crypto_plugin_deleteKeyPair(message);
+  FlValue *response = hardware_crypto_plugin_deleteKeyPair(message);
   g_autoptr(FlValue) value = fl_value_new_list();
   fl_value_append_take(value, response);
   fl_basic_message_channel_respond(channel, response_handle, value, NULL);
@@ -234,7 +234,7 @@ static void hardware_crypto_plugin_handle_sign(
   FlBasicMessageChannelResponseHandle *response_handle,
   gpointer user_data
 ) {
-  g_autoptr(FlValue) response = hardware_crypto_plugin_sign(message);
+  FlValue *response = hardware_crypto_plugin_sign(message);
   g_autoptr(FlValue) value = fl_value_new_list();
   fl_value_append_take(value, response);
   fl_basic_message_channel_respond(channel, response_handle, value, NULL);
