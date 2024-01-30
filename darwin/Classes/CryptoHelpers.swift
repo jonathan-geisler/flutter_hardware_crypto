@@ -53,67 +53,144 @@ private struct PKCS8 {
 
         // https://lapo.it/asn1js/
         static func getPKCS1DEROffset(_ derKey: Data) -> Int? {
-            let bytes = derKey.bytesView
-
             var offset = 0
-            guard bytes.length > offset else { return nil }
-            guard bytes[offset] == 0x30 else { return nil }
+            guard derKey.count > offset else { return nil }
+            guard derKey[offset] == 0x30 else { return nil }
 
             offset += 1
 
-            guard bytes.length > offset else { return nil }
-            if bytes[offset] > 0x80 {
-                offset += Int(bytes[offset]) - 0x80
+            guard derKey.count > offset else { return nil }
+            if derKey[offset] > 0x80 {
+                offset += Int(derKey[offset]) - 0x80
             }
             offset += 1
 
-            guard bytes.length > offset else { return nil }
-            guard bytes[offset] == 0x02 else { return nil }
+            guard derKey.count > offset else { return nil }
+            guard derKey[offset] == 0x02 else { return nil }
 
             offset += 3
 
             // without PKCS8 header
-            guard bytes.length > offset else { return nil }
-            if bytes[offset] == 0x02 {
+            guard derKey.count > offset else { return nil }
+            if derKey[offset] == 0x02 {
                 return 0
             }
 
             let OID: [UInt8] = [0x30, 0x0d, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86,
                                 0xf7, 0x0d, 0x01, 0x01, 0x01, 0x05, 0x00]
 
-            guard bytes.length > offset + OID.count else { return nil }
-            let slice = derKey.bytesViewRange(NSRange(location: offset, length: OID.count))
+            guard derKey.count > offset + OID.count else { return nil }
+            guard OID.elementsEqual(derKey[offset..<offset + OID.count]) else { return nil }
+
+            offset += OID.count
+
+            guard derKey.count > offset else { return nil }
+            guard derKey[offset] == 0x04 else { return nil }
+
+            offset += 1
+
+            guard derKey.count > offset else { return nil }
+            if derKey[offset] > 0x80 {
+                offset += Int(derKey[offset]) - 0x80
+            }
+            offset += 1
+
+            guard derKey.count > offset else { return nil }
+            guard derKey[offset] == 0x30 else { return nil }
+
+            return offset
+        }
+
+        // https://lapo.it/asn1js/
+        static func extractANSIX692Key(_ derKey: Data) -> Data? {
+            var offset = 0
+            guard derKey.count > offset else { return nil }
+            guard derKey[offset] == 0x30 else { return nil }
+
+            offset += 1
+
+            guard derKey.count > offset else { return nil }
+            if derKey[offset] > 0x80 {
+                offset += Int(derKey[offset]) - 0x80
+            }
+
+            offset += 1
+
+            guard derKey.count > offset else { return nil }
+            guard derKey[offset] == 0x02 else { return nil }
+
+            offset += 3
+
+            guard derKey.count > offset else { return nil }
+            if derKey[offset] == 0x02 {
+                return nil
+            }
+
+            let OID: [UInt8] = [
+                0x30, 0x13, 0x06, 0x07, 0x2a, 0x86, 0x48, 0xce,
+                0x3d, 0x02, 0x01, 0x06, 0x08, 0x2a, 0x86, 0x48,
+                0xce, 0x3d, 0x03, 0x01, 0x07
+            ]
+
+            guard derKey.count > offset + OID.count else { return nil }
+            let slice = derKey[offset..<offset + OID.count]
 
             guard OID.elementsEqual(slice) else { return nil }
 
             offset += OID.count
 
-            guard bytes.length > offset else { return nil }
-            guard bytes[offset] == 0x04 else { return nil }
+            guard derKey.count > offset else { return nil }
+            guard derKey[offset] == 0x04 else { return nil }
+
+            offset += 2
+
+            guard derKey.count > offset else { return nil }
+            guard derKey[offset] == 0x30 else { return nil }
+
+            offset += 2
+
+            guard derKey.count > offset else { return nil }
+            guard derKey[offset] == 0x02 else { return nil }
+
+            offset += 3
+
+            guard derKey.count > offset else { return nil }
+            guard derKey[offset] == 0x04 else { return nil }
+
+            offset += 2
+
+            guard derKey.count >= offset + 32 else { return nil }
+
+            let k = derKey[offset..<offset + 32]
+
+            offset += 32
+
+            guard derKey.count > offset else { return nil }
+            guard derKey[offset] == 0xa1 else { return nil }
+
+            offset += 2
+
+            guard derKey.count > offset else { return nil }
+            guard derKey[offset] == 0x03 else { return nil }
+
+            offset += 2
+
+            guard derKey.count >= offset + 66 else { return nil }
 
             offset += 1
 
-            guard bytes.length > offset else { return nil }
-            if bytes[offset] > 0x80 {
-                offset += Int(bytes[offset]) - 0x80
-            }
-            offset += 1
-
-            guard bytes.length > offset else { return nil }
-            guard bytes[offset] == 0x30 else { return nil }
-
-            return offset
+            let ansix692Public = derKey[offset..<offset + 65]
+            return ansix692Public + k
         }
 
         static func stripHeaderIfAny(_ derKey: Data) -> Data? {
+            if let ecKey = extractANSIX692Key(derKey) {
+                return ecKey
+            }
             guard let offset = getPKCS1DEROffset(derKey) else {
                 return nil
             }
             return derKey.subdata(in: offset..<derKey.count)
-        }
-
-        static func hasCorrectHeader(_ derKey: Data) -> Bool {
-            return getPKCS1DEROffset(derKey) != nil
         }
 
     }
@@ -158,51 +235,6 @@ private struct PEM {
 
     static func base64Decode(_ base64Data: String) -> Data? {
         return Data(base64Encoded: base64Data, options: [.ignoreUnknownCharacters])
-    }
-
-}
-
-private extension Data {
-
-    var bytesView: BytesView { return BytesView(self) }
-
-    func bytesViewRange(_ range: NSRange) -> BytesView {
-        return BytesView(self, range: range)
-    }
-
-    struct BytesView: Collection {
-        // The view retains the Data. That's on purpose.
-        // Data doesn't retain the view, so there's no loop.
-        let data: Data
-        init(_ data: Data) {
-            self.data = data
-            self.startIndex = 0
-            self.endIndex = data.count
-        }
-
-        init(_ data: Data, range: NSRange ) {
-            self.data = data
-            self.startIndex = range.location
-            self.endIndex = range.location + range.length
-        }
-
-        subscript (position: Int) -> UInt8 {
-            return data.withUnsafeBytes({ dataBytes -> UInt8 in
-                dataBytes.bindMemory(to: UInt8.self)[position]
-            })
-        }
-        subscript (bounds: Range<Int>) -> Data {
-            return data.subdata(in: bounds)
-        }
-        fileprivate func formIndex(after i: inout Int) {
-            i += 1
-        }
-        fileprivate func index(after i: Int) -> Int {
-            return i + 1
-        }
-        var startIndex: Int
-        var endIndex: Int
-        var length: Int { return endIndex - startIndex }
     }
 
 }
