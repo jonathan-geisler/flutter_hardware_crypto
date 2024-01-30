@@ -36,30 +36,61 @@ class HardwareCryptoPlugin: FlutterPlugin, ActivityAware, HardwareCryptoApi {
     override fun onDetachedFromActivity() {}
 
     override fun isSupported(): Boolean {
-        val hardwareCrypto = this.hardwareCrypto ?: throw NotImplementedError()
+        val hardwareCrypto = this.hardwareCrypto ?: throw Error("HardwareCrypto not initialized")
         return hardwareCrypto.isSupported()
     }
 
-    override fun generateKeyPair(alias: String, callback: (Result<Boolean>) -> Unit) {
-        val hardwareCrypto = this.hardwareCrypto ?: throw NotImplementedError()
-        val result = hardwareCrypto.generateKeyPair(alias)
-        callback(Result.success(result))
+    override fun importPEMKey(alias: String, key: String, callback: (Result<Unit>) -> Unit) {
+        try {
+            val hardwareCrypto = this.hardwareCrypto ?: throw Error("HardwareCrypto not initialized")
+            hardwareCrypto.importPEMKey(alias, key)
+            callback(Result.success(Unit))
+        } catch (e: Exception) {
+            callback(Result.failure(e))
+        }
     }
 
-    override fun deleteKeyPair(alias: String, callback: (Result<Boolean>) -> Unit) {
-        val hardwareCrypto = this.hardwareCrypto ?: throw NotImplementedError()
-        val result = hardwareCrypto.deleteKeyPair(alias)
-        callback(Result.success(result))
+    override fun generateKeyPair(alias: String, callback: (Result<Unit>) -> Unit) {
+        try {
+            val hardwareCrypto = this.hardwareCrypto ?: throw Error("HardwareCrypto not initialized")
+            hardwareCrypto.generateKeyPair(alias)
+            callback(Result.success(Unit))
+        } catch (e: Exception) {
+            callback(Result.failure(e))
+        }
+    }
+
+    override fun exportPublicKey(alias: String, callback: (Result<ByteArray>) -> Unit) {
+        try {
+            val hardwareCrypto = this.hardwareCrypto ?: throw Error("HardwareCrypto not initialized")
+            val publicKey = hardwareCrypto.exportPublicKey(alias)
+            callback(Result.success(publicKey))
+        } catch (e: Exception) {
+            callback(Result.failure(e))
+        }
+    }
+
+    override fun deleteKeyPair(alias: String, callback: (Result<Unit>) -> Unit) {
+        try {
+            val hardwareCrypto = this.hardwareCrypto ?: throw Error("HardwareCrypto not initialized")
+            hardwareCrypto.deleteKeyPair(alias)
+            callback(Result.success(Unit))
+        } catch (e: Exception) {
+            callback(Result.failure(e))
+        }
     }
 
     override fun sign(alias: String, data: ByteArray, callback: (Result<ByteArray>) -> Unit) {
         try {
-            val activityBinding = this.activityBinding ?: throw NotImplementedError()
-            val hardwareCrypto = this.hardwareCrypto ?: throw NotImplementedError()
+            val activityBinding = this.activityBinding ?: throw Error("ActivityPluginBinding not initialized")
+            val hardwareCrypto = this.hardwareCrypto ?: throw Error("HardwareCrypto not initialized")
             val lifecycle = FlutterLifecycleAdapter.getActivityLifecycle(activityBinding)
             lifecycle.coroutineScope.launch {
-                val signed = hardwareCrypto.sign(alias, data)
-                callback(Result.success(signed))
+                try {
+                    callback(hardwareCrypto.sign(alias, data))
+                } catch (e: Exception) {
+                    callback(Result.failure(e))
+                }
             }
         } catch (e: Exception) {
             callback(Result.failure(e))

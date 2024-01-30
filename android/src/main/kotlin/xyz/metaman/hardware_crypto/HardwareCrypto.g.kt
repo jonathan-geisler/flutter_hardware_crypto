@@ -46,8 +46,10 @@ class FlutterError (
 /** Generated interface from Pigeon that represents a handler of messages from Flutter. */
 interface HardwareCryptoApi {
   fun isSupported(): Boolean
-  fun generateKeyPair(alias: String, callback: (Result<Boolean>) -> Unit)
-  fun deleteKeyPair(alias: String, callback: (Result<Boolean>) -> Unit)
+  fun importPEMKey(alias: String, key: String, callback: (Result<Unit>) -> Unit)
+  fun generateKeyPair(alias: String, callback: (Result<Unit>) -> Unit)
+  fun exportPublicKey(alias: String, callback: (Result<ByteArray>) -> Unit)
+  fun deleteKeyPair(alias: String, callback: (Result<Unit>) -> Unit)
   fun sign(alias: String, data: ByteArray, callback: (Result<ByteArray>) -> Unit)
 
   companion object {
@@ -75,12 +77,51 @@ interface HardwareCryptoApi {
         }
       }
       run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.hardware_crypto.HardwareCryptoApi.importPEMKey", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val aliasArg = args[0] as String
+            val keyArg = args[1] as String
+            api.importPEMKey(aliasArg, keyArg) { result: Result<Unit> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(wrapError(error))
+              } else {
+                reply.reply(wrapResult(null))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
         val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.hardware_crypto.HardwareCryptoApi.generateKeyPair", codec)
         if (api != null) {
           channel.setMessageHandler { message, reply ->
             val args = message as List<Any?>
             val aliasArg = args[0] as String
-            api.generateKeyPair(aliasArg) { result: Result<Boolean> ->
+            api.generateKeyPair(aliasArg) { result: Result<Unit> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(wrapError(error))
+              } else {
+                reply.reply(wrapResult(null))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.hardware_crypto.HardwareCryptoApi.exportPublicKey", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val aliasArg = args[0] as String
+            api.exportPublicKey(aliasArg) { result: Result<ByteArray> ->
               val error = result.exceptionOrNull()
               if (error != null) {
                 reply.reply(wrapError(error))
@@ -100,13 +141,12 @@ interface HardwareCryptoApi {
           channel.setMessageHandler { message, reply ->
             val args = message as List<Any?>
             val aliasArg = args[0] as String
-            api.deleteKeyPair(aliasArg) { result: Result<Boolean> ->
+            api.deleteKeyPair(aliasArg) { result: Result<Unit> ->
               val error = result.exceptionOrNull()
               if (error != null) {
                 reply.reply(wrapError(error))
               } else {
-                val data = result.getOrNull()
-                reply.reply(wrapResult(data))
+                reply.reply(wrapResult(null))
               }
             }
           }

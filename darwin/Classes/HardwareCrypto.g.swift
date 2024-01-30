@@ -42,8 +42,10 @@ private func nilOrValue<T>(_ value: Any?) -> T? {
 /// Generated protocol from Pigeon that represents a handler of messages from Flutter.
 protocol HardwareCryptoApi {
   func isSupported() throws -> Bool
-  func generateKeyPair(alias: String, completion: @escaping (Result<Bool, Error>) -> Void)
-  func deleteKeyPair(alias: String, completion: @escaping (Result<Bool, Error>) -> Void)
+  func importPEMKey(alias: String, key: String, completion: @escaping (Result<Void, Error>) -> Void)
+  func generateKeyPair(alias: String, completion: @escaping (Result<Void, Error>) -> Void)
+  func exportPublicKey(alias: String, completion: @escaping (Result<FlutterStandardTypedData, Error>) -> Void)
+  func deleteKeyPair(alias: String, completion: @escaping (Result<Void, Error>) -> Void)
   func sign(alias: String, data: FlutterStandardTypedData, completion: @escaping (Result<FlutterStandardTypedData, Error>) -> Void)
 }
 
@@ -65,12 +67,47 @@ class HardwareCryptoApiSetup {
     } else {
       isSupportedChannel.setMessageHandler(nil)
     }
+    let importPEMKeyChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.hardware_crypto.HardwareCryptoApi.importPEMKey", binaryMessenger: binaryMessenger)
+    if let api = api {
+      importPEMKeyChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let aliasArg = args[0] as! String
+        let keyArg = args[1] as! String
+        api.importPEMKey(alias: aliasArg, key: keyArg) { result in
+          switch result {
+          case .success:
+            reply(wrapResult(nil))
+          case .failure(let error):
+            reply(wrapError(error))
+          }
+        }
+      }
+    } else {
+      importPEMKeyChannel.setMessageHandler(nil)
+    }
     let generateKeyPairChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.hardware_crypto.HardwareCryptoApi.generateKeyPair", binaryMessenger: binaryMessenger)
     if let api = api {
       generateKeyPairChannel.setMessageHandler { message, reply in
         let args = message as! [Any?]
         let aliasArg = args[0] as! String
         api.generateKeyPair(alias: aliasArg) { result in
+          switch result {
+          case .success:
+            reply(wrapResult(nil))
+          case .failure(let error):
+            reply(wrapError(error))
+          }
+        }
+      }
+    } else {
+      generateKeyPairChannel.setMessageHandler(nil)
+    }
+    let exportPublicKeyChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.hardware_crypto.HardwareCryptoApi.exportPublicKey", binaryMessenger: binaryMessenger)
+    if let api = api {
+      exportPublicKeyChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let aliasArg = args[0] as! String
+        api.exportPublicKey(alias: aliasArg) { result in
           switch result {
           case .success(let res):
             reply(wrapResult(res))
@@ -80,7 +117,7 @@ class HardwareCryptoApiSetup {
         }
       }
     } else {
-      generateKeyPairChannel.setMessageHandler(nil)
+      exportPublicKeyChannel.setMessageHandler(nil)
     }
     let deleteKeyPairChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.hardware_crypto.HardwareCryptoApi.deleteKeyPair", binaryMessenger: binaryMessenger)
     if let api = api {
@@ -89,8 +126,8 @@ class HardwareCryptoApiSetup {
         let aliasArg = args[0] as! String
         api.deleteKeyPair(alias: aliasArg) { result in
           switch result {
-          case .success(let res):
-            reply(wrapResult(res))
+          case .success:
+            reply(wrapResult(nil))
           case .failure(let error):
             reply(wrapError(error))
           }

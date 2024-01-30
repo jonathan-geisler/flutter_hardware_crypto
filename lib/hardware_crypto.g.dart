@@ -62,7 +62,29 @@ class HardwareCryptoApi {
     }
   }
 
-  Future<bool> generateKeyPair(String alias) async {
+  Future<void> importPEMKey(String alias, String key) async {
+    const String __pigeon_channelName = 'dev.flutter.pigeon.hardware_crypto.HardwareCryptoApi.importPEMKey';
+    final BasicMessageChannel<Object?> __pigeon_channel = BasicMessageChannel<Object?>(
+      __pigeon_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: __pigeon_binaryMessenger,
+    );
+    final List<Object?>? __pigeon_replyList =
+        await __pigeon_channel.send(<Object?>[alias, key]) as List<Object?>?;
+    if (__pigeon_replyList == null) {
+      throw _createConnectionError(__pigeon_channelName);
+    } else if (__pigeon_replyList.length > 1) {
+      throw PlatformException(
+        code: __pigeon_replyList[0]! as String,
+        message: __pigeon_replyList[1] as String?,
+        details: __pigeon_replyList[2],
+      );
+    } else {
+      return;
+    }
+  }
+
+  Future<void> generateKeyPair(String alias) async {
     const String __pigeon_channelName = 'dev.flutter.pigeon.hardware_crypto.HardwareCryptoApi.generateKeyPair';
     final BasicMessageChannel<Object?> __pigeon_channel = BasicMessageChannel<Object?>(
       __pigeon_channelName,
@@ -79,18 +101,13 @@ class HardwareCryptoApi {
         message: __pigeon_replyList[1] as String?,
         details: __pigeon_replyList[2],
       );
-    } else if (__pigeon_replyList[0] == null) {
-      throw PlatformException(
-        code: 'null-error',
-        message: 'Host platform returned null value for non-null return value.',
-      );
     } else {
-      return (__pigeon_replyList[0] as bool?)!;
+      return;
     }
   }
 
-  Future<bool> deleteKeyPair(String alias) async {
-    const String __pigeon_channelName = 'dev.flutter.pigeon.hardware_crypto.HardwareCryptoApi.deleteKeyPair';
+  Future<Uint8List> exportPublicKey(String alias) async {
+    const String __pigeon_channelName = 'dev.flutter.pigeon.hardware_crypto.HardwareCryptoApi.exportPublicKey';
     final BasicMessageChannel<Object?> __pigeon_channel = BasicMessageChannel<Object?>(
       __pigeon_channelName,
       pigeonChannelCodec,
@@ -112,7 +129,29 @@ class HardwareCryptoApi {
         message: 'Host platform returned null value for non-null return value.',
       );
     } else {
-      return (__pigeon_replyList[0] as bool?)!;
+      return (__pigeon_replyList[0] as Uint8List?)!;
+    }
+  }
+
+  Future<void> deleteKeyPair(String alias) async {
+    const String __pigeon_channelName = 'dev.flutter.pigeon.hardware_crypto.HardwareCryptoApi.deleteKeyPair';
+    final BasicMessageChannel<Object?> __pigeon_channel = BasicMessageChannel<Object?>(
+      __pigeon_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: __pigeon_binaryMessenger,
+    );
+    final List<Object?>? __pigeon_replyList =
+        await __pigeon_channel.send(<Object?>[alias]) as List<Object?>?;
+    if (__pigeon_replyList == null) {
+      throw _createConnectionError(__pigeon_channelName);
+    } else if (__pigeon_replyList.length > 1) {
+      throw PlatformException(
+        code: __pigeon_replyList[0]! as String,
+        message: __pigeon_replyList[1] as String?,
+        details: __pigeon_replyList[2],
+      );
+    } else {
+      return;
     }
   }
 

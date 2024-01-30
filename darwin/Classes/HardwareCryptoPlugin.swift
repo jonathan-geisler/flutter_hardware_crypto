@@ -16,6 +16,14 @@ func messenger(from registrar: FlutterPluginRegistrar) -> FlutterBinaryMessenger
     #error("Unsupported platform.")
 #endif
 
+private enum HardwareCryptoError: Error {
+    case failedToCopyPublicKey
+    case failedToCopyExternalRepresentation
+    case failedToCreateSignature
+    case failedToImportKey
+    case failedToCreateKey
+}
+
 public class HardwareCryptoPlugin: NSObject, FlutterPlugin {
     public static func register(with registrar: FlutterPluginRegistrar) {
         let api = HardwareCryptoImplementation()
@@ -79,33 +87,102 @@ private class HardwareCryptoImplementation: HardwareCryptoApi {
     func isSupported() throws -> Bool {
         return true
     }
-    
-    func generateKeyPair(alias: String, completion: @escaping (Result<Bool, Error>) -> Void) {
+
+    func importPEMKey(alias: String, key: String, completion: @escaping (Result<Void, Error>) -> Void) {
+        let keyData: Data
+        do {
+            keyData = try SwKeyConvert.PrivateKey.pemToPKCS1DER(key)
+        } catch {
+            completion(.failure(error))
+            return
+        }
+
+        var parameters = Self.keychainCreationParameters
+        parameters[kSecAttrApplicationLabel] = alias
+
+        var error: Unmanaged<CFError>?
+        let importedKey = SecKeyCreateWithData(keyData as CFData, parameters as CFDictionary, &error)
+        if importedKey != nil {
+            completion(.success(()))
+            return
+        }
+
+        guard let error else {
+            completion(.failure(HardwareCryptoError.failedToImportKey))
+            return
+        }
+
+        completion(.failure(error.takeRetainedValue()))
+    }
+
+    func generateKeyPair(alias: String, completion: @escaping (Result<Void, Error>) -> Void) {
         var parameters = Self.keychainCreationParameters
         parameters[kSecAttrApplicationLabel] = alias
 
         var error: Unmanaged<CFError>?
         let key = SecKeyCreateRandomKey(parameters as CFDictionary, &error)
         if key != nil {
-            completion(.success(true))
+            completion(.success(()))
             return
         }
 
         guard let error else {
-            completion(.success(false))
+            completion(.failure(HardwareCryptoError.failedToCreateKey))
             return
         }
 
         let errorValue = error.takeRetainedValue()
         // Consider duplicate key (ie. it has already been configured) a success case.
-        completion(.success(OSStatus(CFErrorGetCode(errorValue)) == errSecDuplicateItem))
+        if OSStatus(CFErrorGetCode(errorValue)) == errSecDuplicateItem {
+            completion(.success(()))
+            return
+        }
+
+        completion(.failure(errorValue))
     }
 
-    func deleteKeyPair(alias: String, completion: @escaping (Result<Bool, Error>) -> Void) {
+    func exportPublicKey(alias: String, completion: @escaping (Result<FlutterStandardTypedData, Error>) -> Void) {
+        let result = getPrivateKey(alias: alias)
+        let privateKey: SecKey
+        switch result {
+        case let .failure(error):
+            completion(.failure(error))
+            return
+
+        case let .success(privKey):
+            privateKey = privKey
+        }
+
+        guard let publicKey = SecKeyCopyPublicKey(privateKey) else {
+            completion(.failure(HardwareCryptoError.failedToCopyPublicKey))
+            return
+        }
+
+        var error: Unmanaged<CFError>?
+        let data = SecKeyCopyExternalRepresentation(publicKey, &error)
+        if let data {
+            completion(.success(.init(bytes: data as Data)))
+            return
+        }
+
+        guard let error else {
+            completion(.failure(HardwareCryptoError.failedToCopyExternalRepresentation))
+            return
+        }
+
+        completion(.failure(error.takeRetainedValue()))
+    }
+
+    func deleteKeyPair(alias: String, completion: @escaping (Result<Void, Error>) -> Void) {
         var parameters = Self.keychainOtherParameters
         parameters[kSecAttrApplicationLabel] = alias
         let status = SecItemDelete(parameters as CFDictionary)
-        completion(.success(status == errSecSuccess))
+        if status == errSecSuccess {
+            completion(.success(()))
+            return
+        }
+
+        completion(.failure(NSError(domain: NSOSStatusErrorDomain, code: Int(status))))
     }
 
     func sign(alias: String, data: FlutterStandardTypedData, completion: @escaping (Result<FlutterStandardTypedData, Error>) -> Void) {
@@ -133,7 +210,7 @@ private class HardwareCryptoImplementation: HardwareCryptoApi {
         }
 
         guard let error else {
-            completion(.failure(NSError(domain: NSOSStatusErrorDomain, code: Int(errSecCoreFoundationUnknown))))
+            completion(.failure(HardwareCryptoError.failedToCreateSignature))
             return
         }
 

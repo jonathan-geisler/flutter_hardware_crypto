@@ -17,10 +17,16 @@ abstract class HardwareCryptoApi {
   bool isSupported();
 
   @async
-  bool generateKeyPair(String alias);
+  void importPEMKey(String alias, String key);
 
   @async
-  bool deleteKeyPair(String alias);
+  void generateKeyPair(String alias);
+
+  @async
+  Uint8List exportPublicKey(String alias);
+
+  @async
+  void deleteKeyPair(String alias);
 
   @async
   Uint8List sign(String alias, Uint8List data);

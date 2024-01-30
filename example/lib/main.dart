@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -20,7 +21,18 @@ class AppContent extends StatelessWidget {
   final _hardwareCryptoPlugin = HardwareCryptoApi();
 
   AppContent({super.key}) {
-    _hardwareCryptoPlugin.generateKeyPair("test");
+    unawaited(() async {
+      const key =
+"""-----BEGIN PRIVATE KEY-----
+MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgPIjDfHtSbTNDCEGk
+Z66jTJe8s0efvyUjkez6EeFQjHShRANCAAT8sCh1ENDgL+cqpP+6GViXv3xJGRrm
+2LWElCHxLaVY9dusX2wPdVXnPsERxSz9dbzGnJA5k62xqDhBbaFB681d
+-----END PRIVATE KEY-----
+""";
+      await _hardwareCryptoPlugin.importPEMKey("test", key);
+      final bytes = await _hardwareCryptoPlugin.exportPublicKey("test");
+      print(bytes);
+    }.call());
   }
 
   @override

@@ -5,7 +5,9 @@ import android.os.Build
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyInfo
 import android.security.keystore.KeyProperties
+import android.security.keystore.KeyProtection
 import androidx.annotation.ChecksSdkIntAtLeast
+import androidx.annotation.RequiresApi
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.core.content.ContextCompat
@@ -13,20 +15,47 @@ import androidx.fragment.app.FragmentActivity
 import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding
 import kotlinx.coroutines.CancellableContinuation
 import kotlinx.coroutines.suspendCancellableCoroutine
+import org.bouncycastle.asn1.ASN1ObjectIdentifier
+import org.bouncycastle.asn1.x500.X500Name
+import org.bouncycastle.asn1.x509.BasicConstraints
+import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter
+import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder
+import org.bouncycastle.jce.provider.BouncyCastleProvider
+import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder
+import java.math.BigInteger
+import java.security.AlgorithmParameters
 import java.security.KeyFactory
+import java.security.KeyPair
 import java.security.KeyPairGenerator
 import java.security.KeyStore
+import java.security.PrivateKey
 import java.security.Signature
+import java.security.cert.Certificate
+import java.security.interfaces.ECPrivateKey
+import java.security.interfaces.ECPublicKey
+import java.security.spec.ECGenParameterSpec
+import java.security.spec.ECParameterSpec
+import java.security.spec.ECPoint
+import java.security.spec.ECPublicKeySpec
+import java.security.spec.PKCS8EncodedKeySpec
+import java.util.Base64
+import java.util.Calendar
+import java.util.Date
 import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
 
 class HardwareCrypto(private val activityBinding: ActivityPluginBinding) {
     companion object {
         const val minimumAndroidSDK = Build.VERSION_CODES.R
         const val notImplementedError = "Not implemented before Android SDK $minimumAndroidSDK"
+
+        const val privateKeyPrefix = "-----BEGIN PRIVATE KEY-----\n"
+        const val privateKeySuffix = "\n-----END PRIVATE KEY-----"
+        const val privateRsaKeyPrefix = "-----BEGIN RSA PRIVATE KEY-----\n"
+        const val privateRsaKeySuffix = "\n-----END RSA PRIVATE KEY-----"
     }
 
-    private val activity: FragmentActivity = activityBinding.activity as? FragmentActivity ?: throw NotImplementedError()
+    private val activity: FragmentActivity = activityBinding.activity as? FragmentActivity ?:
+        throw Error("Android Activity is not a FragmentActivity")
 
     private val keyStore = KeyStore.getInstance("AndroidKeyStore").apply {
         load(null)
@@ -65,32 +94,121 @@ class HardwareCrypto(private val activityBinding: ActivityPluginBinding) {
     }
 
     private class BiometricPromptCallback(
-        private val continuation: CancellableContinuation<BiometricPrompt.CryptoObject>
+        private val continuation: CancellableContinuation<Result<BiometricPrompt.CryptoObject>>
     ): BiometricPrompt.AuthenticationCallback() {
         override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
             super.onAuthenticationError(errorCode, errString)
-            continuation.resumeWithException(NotImplementedError())
+            continuation.resume(Result.failure(Error("Error code ${errorCode}: $errString")))
         }
 
         override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
             super.onAuthenticationSucceeded(result)
             val cryptoObject = result.cryptoObject
             if (cryptoObject != null) {
-                continuation.resume(cryptoObject)
+                continuation.resume(Result.success(cryptoObject))
             } else {
-                continuation.resumeWithException(NotImplementedError())
+                continuation.resume(Result.failure(Error("onAuthenticationSucceeded gave a null cryptoObject")))
             }
         }
 
         override fun onAuthenticationFailed() {
             super.onAuthenticationFailed()
-            continuation.resumeWithException(NotImplementedError())
+            continuation.resume(Result.failure(Error("Unknown failure, onAuthenticationFailed called")))
         }
     }
 
-    fun generateKeyPair(alias: String): Boolean {
+    @RequiresApi(Build.VERSION_CODES.M)
+    private fun publicFromPrivateKey(privateKey: ECPrivateKey): ECPublicKey {
+        val affineX = privateKey.params.generator.affineX
+        val affineY = privateKey.params.generator.affineY
+        val pubPoint = ECPoint(affineX, affineY)
+        val parameters = AlgorithmParameters.getInstance(KeyProperties.KEY_ALGORITHM_EC)
+        parameters.init(ECGenParameterSpec("secp256r1"))
+        val ecParameters = parameters.getParameterSpec(ECParameterSpec::class.java)
+        val pubSpec = ECPublicKeySpec(pubPoint, ecParameters)
+        val factory = KeyFactory.getInstance(KeyProperties.KEY_ALGORITHM_EC)
+        return factory.generatePublic(pubSpec) as ECPublicKey
+    }
+
+    private fun selfSign(keyPair: KeyPair): Certificate? {
+        val now = System.currentTimeMillis()
+        val startDate = Date(now)
+        val dnName = X500Name("cn=example")
+        val certSerialNumber = BigInteger(now.toString())
+        val calendar = Calendar.getInstance()
+        calendar.time = startDate
+        calendar.add(Calendar.YEAR, 1)
+        val endDate = calendar.time
+        val contentSigner = JcaContentSignerBuilder("SHA256withECDSA")
+            .build(keyPair.private)
+        val certBuilder = JcaX509v3CertificateBuilder(
+            dnName,
+            certSerialNumber,
+            startDate,
+            endDate,
+            dnName,
+            keyPair.public
+        )
+
+        val basicConstraints = BasicConstraints(true)
+        certBuilder.addExtension(
+            ASN1ObjectIdentifier("2.5.29.19"),
+            true,
+            basicConstraints
+        )
+
+        val bcProvider = BouncyCastleProvider()
+        return JcaX509CertificateConverter().setProvider(bcProvider)
+            .getCertificate(certBuilder.build(contentSigner))
+    }
+
+    private fun cleanUpPEMKey(key: String): String {
+        return if (key.startsWith(privateKeyPrefix)) {
+            key
+                .trim()
+                .removePrefix(privateKeyPrefix)
+                .removeSuffix(privateKeySuffix)
+                .replace("\\s".toRegex(), "")
+        } else if (key.startsWith(privateRsaKeyPrefix)) {
+            key
+                .trim()
+                .removePrefix(privateRsaKeyPrefix)
+                .removeSuffix(privateRsaKeySuffix)
+                .replace("\\s".toRegex(), "")
+        } else {
+            key.replace("\\s".toRegex(), "")
+        }
+    }
+
+    fun importPEMKey(alias: String, key: String) {
         if (!isSupported()) {
-            throw NotImplementedError(notImplementedError)
+            throw Error(notImplementedError)
+        }
+
+        val factory = KeyFactory.getInstance(KeyProperties.KEY_ALGORITHM_EC)
+        val headerlessKey = cleanUpPEMKey(key)
+        val spec = PKCS8EncodedKeySpec(Base64.getDecoder().decode(headerlessKey))
+
+        val privateKey = factory.generatePrivate(spec) as ECPrivateKey
+        val publicKey = publicFromPrivateKey(privateKey)
+        val certificate = selfSign(KeyPair(publicKey, privateKey))
+            ?: throw Error("Failed to generate certificate for public key")
+
+        keyStore.setEntry(
+            alias,
+            KeyStore.PrivateKeyEntry(privateKey, arrayOf(certificate)),
+            KeyProtection.Builder(KeyProperties.PURPOSE_SIGN or KeyProperties.PURPOSE_VERIFY)
+                .setUserAuthenticationParameters(0, KeyProperties.AUTH_BIOMETRIC_STRONG)
+                .setInvalidatedByBiometricEnrollment(false)
+                .setUserAuthenticationRequired(true)
+                .setDigests(KeyProperties.DIGEST_SHA256)
+                .build()
+        )
+    }
+
+    fun generateKeyPair(alias: String) {
+        if (!isSupported()) {
+            throw Error(notImplementedError)
         }
 
         val kpg = KeyPairGenerator.getInstance(
@@ -100,63 +218,74 @@ class HardwareCrypto(private val activityBinding: ActivityPluginBinding) {
         val parameterSpec = KeyGenParameterSpec.Builder(
                 alias,
                 KeyProperties.PURPOSE_SIGN or KeyProperties.PURPOSE_VERIFY
-        ).run {
+        )
             // Enforce strong biometric protection and authentication for every operation
-            setUserAuthenticationParameters(0, KeyProperties.AUTH_BIOMETRIC_STRONG)
-
+            .setUserAuthenticationParameters(0, KeyProperties.AUTH_BIOMETRIC_STRONG)
             // Use Android's StrongBox
-            setIsStrongBoxBacked(!isEmulator)
-
+            .setIsStrongBoxBacked(!isEmulator)
             // Don't invalidate key after changing biometrics, otherwise we lose it
-            setInvalidatedByBiometricEnrollment(false)
-
+            .setInvalidatedByBiometricEnrollment(false)
             // Require user authentication
-            setUserAuthenticationRequired(true)
-
-            setDigests(KeyProperties.DIGEST_SHA256)
-
-            build()
-        }
+            .setUserAuthenticationRequired(true)
+            .setDigests(KeyProperties.DIGEST_SHA256)
+            .build()
 
         kpg.initialize(parameterSpec)
         kpg.generateKeyPair()
 
         val entry = keyStore.getEntry(alias, null) as KeyStore.PrivateKeyEntry
-        val factory = KeyFactory.getInstance(entry.privateKey.algorithm, "AndroidKeyStore")
+        val factory = KeyFactory.getInstance(KeyProperties.KEY_ALGORITHM_EC, "AndroidKeyStore")
         val keyInfo = factory.getKeySpec(entry.privateKey, KeyInfo::class.java)
         if (!keyInfo.isUserAuthenticationRequirementEnforcedBySecureHardware && !isEmulator) {
             keyStore.deleteEntry(alias)
-            throw NotImplementedError()
+            throw Error("Generate keypair security is not enforced by hardware")
         }
-
-        return true
     }
 
-    fun deleteKeyPair(alias: String): Boolean {
+    fun exportPublicKey(alias: String): ByteArray {
         if (!isSupported()) {
-            throw NotImplementedError(notImplementedError)
+            throw Error(notImplementedError)
+        }
+
+        val entry = keyStore.getEntry(alias, null) as KeyStore.PrivateKeyEntry
+        val pubKey = entry.certificate.publicKey as ECPublicKey;
+        /// ANSI X9.63 public key: 0x04 (1 byte) + X (32 bytes) + Y (32 bytes)
+        val affineX = pubKey.params.generator.affineX
+        val affineY = pubKey.params.generator.affineY
+        return byteArrayOf(0x04) + affineX.toByteArray() + affineY.toByteArray()
+    }
+
+    fun deleteKeyPair(alias: String) {
+        if (!isSupported()) {
+            throw Error(notImplementedError)
         }
 
         keyStore.deleteEntry(alias)
-        return true
     }
 
-    suspend fun sign(alias: String, data: ByteArray): ByteArray {
+    suspend fun sign(alias: String, data: ByteArray): Result<ByteArray> {
         if (!isSupported()) {
-            throw NotImplementedError(notImplementedError)
+            return Result.failure(Error(notImplementedError))
         }
 
         val entry = keyStore.getEntry(alias, null) as KeyStore.PrivateKeyEntry
         val signature = Signature.getInstance("SHA256withECDSA")
         signature.initSign(entry.privateKey)
-        authenticate(BiometricPrompt.CryptoObject(signature))
-        signature.update(data)
-        return signature.sign()
+
+        val result = authenticate(BiometricPrompt.CryptoObject(signature))
+        val cryptoObject = result.getOrElse {
+            return Result.failure(it)
+        }
+
+        val authorizedSignature = cryptoObject.signature
+            ?: return Result.failure(Error("CryptoObject.signature is null"))
+        authorizedSignature.update(data)
+        return Result.success(authorizedSignature.sign())
     }
 
     private suspend fun authenticate(
         cryptoObject: BiometricPrompt.CryptoObject
-    ): BiometricPrompt.CryptoObject = suspendCancellableCoroutine { continuation ->
+    ): Result<BiometricPrompt.CryptoObject> = suspendCancellableCoroutine { continuation ->
         val executor = ContextCompat.getMainExecutor(activity)
         val biometricPrompt = BiometricPrompt(
             activity,

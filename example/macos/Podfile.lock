@@ -16,8 +16,8 @@ EXTERNAL SOURCES:
 
 SPEC CHECKSUMS:
   FlutterMacOS: 8f6f14fa908a6fb3fba0cd85dbd81ec4b251fb24
-  hardware_crypto: b5945c3f20c391a3b2ec36e3edcccdd86c13aff3
+  hardware_crypto: 10865e8e47b53899bb7c2386ca2451b7ad85c6cc
 
 PODFILE CHECKSUM: 9ebaf0ce3d369aaa26a9ea0e159195ed94724cf3
 
-COCOAPODS: 1.14.3
+COCOAPODS: 1.15.0
