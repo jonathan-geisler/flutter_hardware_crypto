@@ -206,6 +206,8 @@ class HardwareCrypto(private val activityBinding: ActivityPluginBinding) {
         )
     }
 
+    private var pubKeyBytes: ByteArray = byteArrayOf()
+
     fun generateKeyPair(alias: String) {
         if (!isSupported()) {
             throw Error(notImplementedError)
@@ -231,7 +233,9 @@ class HardwareCrypto(private val activityBinding: ActivityPluginBinding) {
             .build()
 
         kpg.initialize(parameterSpec)
-        kpg.generateKeyPair()
+        val kp = kpg.generateKeyPair()
+        val pubKey = kp.getPublic()
+        pubKeyBytes = pubKey.getEncoded()
 
         val entry = keyStore.getEntry(alias, null) as KeyStore.PrivateKeyEntry
         val factory = KeyFactory.getInstance(KeyProperties.KEY_ALGORITHM_EC, "AndroidKeyStore")
@@ -247,12 +251,7 @@ class HardwareCrypto(private val activityBinding: ActivityPluginBinding) {
             throw Error(notImplementedError)
         }
 
-        val entry = keyStore.getEntry(alias, null) as KeyStore.PrivateKeyEntry
-        val pubKey = entry.certificate.publicKey as ECPublicKey;
-        /// ANSI X9.63 public key: 0x04 (1 byte) + X (32 bytes) + Y (32 bytes)
-        val affineX = pubKey.params.generator.affineX
-        val affineY = pubKey.params.generator.affineY
-        return byteArrayOf(0x04) + affineX.toByteArray() + affineY.toByteArray()
+        return pubKeyBytes
     }
 
     fun deleteKeyPair(alias: String) {
