@@ -234,8 +234,7 @@ class HardwareCrypto(private val activityBinding: ActivityPluginBinding) {
 
         kpg.initialize(parameterSpec)
         val kp = kpg.generateKeyPair()
-        val pubKey = kp.getPublic()
-        pubKeyBytes = pubKey.getEncoded()
+        pubKeyBytes = kp.public.encoded
 
         val entry = keyStore.getEntry(alias, null) as KeyStore.PrivateKeyEntry
         val factory = KeyFactory.getInstance(KeyProperties.KEY_ALGORITHM_EC, "AndroidKeyStore")
